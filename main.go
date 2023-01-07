@@ -9,22 +9,82 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/ssilva/bggo"
 )
 
+var months = []string{"Jan", "Feb", "March", "April", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"}
+
 func main() {
-	resp := retrievePlays("wez470")
+	router := gin.Default()
+	router.LoadHTMLFiles("./templates/bgg-stats.html", "./templates/not-found.html")
+
+	router.GET("/bgg/user/:name/", func(c *gin.Context) {
+		user, ok := c.Params.Get("name")
+		if !ok {
+			c.HTML(http.StatusNotFound, "not-found.html", gin.H{})
+			return
+		}
+		year := c.Query("year")
+		if year == "" {
+			year = fmt.Sprintf("%d", time.Now().Year())
+		}
+
+		statsData, err := getStats(user, year)
+		if err != nil {
+			c.HTML(http.StatusNotFound, "not-found.html", gin.H{})
+			return
+		}
+
+		c.HTML(http.StatusOK, "bgg-stats.html", statsData)
+	})
+
+	router.Run(":8080")
+}
+
+func getStats(user string, year string) (*gin.H, error) {
+	resp, err := retrievePlays(user, year)
+	if err != nil {
+		return nil, err
+	}
+
 	printPlays(resp)
-	resp2 := retrievePlays("kernella")
-	printPlays(resp2)
+	plays := make([]int, 12)
+	for _, r := range resp.Plays {
+		monthInt, err := parseMonth(r.Date)
+		if err != nil {
+			fmt.Println("failed to parse date: ", r.Date)
+			continue
+		}
+		plays[monthInt-1]++
+	}
+
+	return &gin.H{
+		"months": months,
+		"plays":  plays,
+	}, nil
+}
+
+func parseMonth(date string) (int, error) {
+	dateParts := strings.Split(date, "-")
+	if len(dateParts) != 3 {
+		return 0, fmt.Errorf("failed to parse date")
+	}
+	monthInt, err := strconv.Atoi(dateParts[1])
+	if err != nil {
+		return 0, err
+	}
+	return monthInt, nil
 }
 
 // largely copied from github.com/ssilva/bggo/cmd to get things started
 
 const (
-	bggurlplays      string = "https://www.boardgamegeek.com/xmlapi2/plays?username="
+	bggurlplays      string = "https://www.boardgamegeek.com/xmlapi2/plays?username=%s&mindate=%s&maxdate=%s"
 	bggurlsearch     string = "https://www.boardgamegeek.com/xmlapi2/search?type=boardgame&query="
 	bggurlthing      string = "https://www.boardgamegeek.com/xmlapi2/thing?stats=1&id="
 	bggurlhot        string = "https://www.boardgamegeek.com/xmlapi2/hot?type=boardgame"
@@ -50,12 +110,16 @@ func printHelp() {
 	fmt.Println("  bggo -hot")
 }
 
-func retrievePlays(username string) (resp *bggo.PlaysResponse) {
-	xmldata := httpGetAndReadAll(bggurlplays + url.QueryEscape(username))
-	resp = &bggo.PlaysResponse{}
-	unmarshalOrDie(xmldata, resp)
+func retrievePlays(username, year string) (*bggo.PlaysResponse, error) {
+	playsURL := fmt.Sprintf(bggurlplays, url.QueryEscape(username), url.QueryEscape(fmt.Sprintf("%s-01-01", year)), url.QueryEscape(fmt.Sprintf("%s-12-31", year)))
+	xmldata := httpGetAndReadAll(playsURL)
+	resp := &bggo.PlaysResponse{}
 
-	return
+	err := xml.Unmarshal(xmldata, resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func printPlays(resp *bggo.PlaysResponse) {
