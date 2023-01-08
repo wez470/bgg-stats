@@ -46,26 +46,70 @@ func main() {
 	router.Run(":8080")
 }
 
+type GamePlays struct {
+	Name  string
+	Plays int
+}
+
 func getStats(user string, year string) (*gin.H, error) {
 	resp, err := retrievePlays(user, year)
 	if err != nil {
 		return nil, err
 	}
 
-	printPlays(resp)
-	plays := make([]int, 12)
-	for _, r := range resp.Plays {
-		monthInt, err := parseMonth(r.Date)
+	playsByMonth := make([]int, 12)
+	playsByGame := make(map[string]int)
+	var totalPlays int
+	for _, play := range resp.Plays {
+		monthInt, err := parseMonth(play.Date)
 		if err != nil {
-			fmt.Println("failed to parse date: ", r.Date)
+			fmt.Println("failed to parse date: ", play.Date)
 			continue
 		}
-		plays[monthInt-1]++
+		fmt.Println(play)
+		if len(play.Items) < 0 || len(play.Items) > 1 {
+			return nil, fmt.Errorf("more than 1 item in play")
+		}
+		game := play.Items[0]
+
+		playsByMonth[monthInt-1] += play.Quantity
+		playsByGame[game.Name] += play.Quantity
+		totalPlays += play.Quantity
+	}
+
+	// All games by plays
+	gamePlaysList := make([]GamePlays, 0, len(playsByGame))
+	for g, p := range playsByGame {
+		gamePlaysList = append(gamePlaysList, GamePlays{g, p})
+	}
+	sort.Slice(gamePlaysList, func(i, j int) bool {
+		return gamePlaysList[i].Plays > gamePlaysList[j].Plays
+	})
+
+	// Top ten
+	var topTenGamesByPlays []GamePlays
+	for i := 0; i < 10; i++ {
+		if i >= len(gamePlaysList) {
+			break
+		}
+		topTenGamesByPlays = append(topTenGamesByPlays, gamePlaysList[i])
+	}
+
+	// Percentage
+	var gameNames []string
+	var gamePercentages []int
+	for _, gamePlay := range gamePlaysList {
+		gameNames = append(gameNames, gamePlay.Name)
+		fmt.Println(float32(gamePlay.Plays) / float32(totalPlays) * 100.0)
+		gamePercentages = append(gamePercentages, int(float32(gamePlay.Plays)/float32(totalPlays)*100.0))
 	}
 
 	return &gin.H{
-		"months": months,
-		"plays":  plays,
+		"months":             months,
+		"playsByMonth":       playsByMonth,
+		"topTenGamesByPlays": topTenGamesByPlays,
+		"gameNames":          gameNames,
+		"gamePercentages":    gamePercentages,
 	}, nil
 }
 
@@ -111,6 +155,7 @@ func printHelp() {
 }
 
 func retrievePlays(username, year string) (*bggo.PlaysResponse, error) {
+	// TODO: Paging
 	playsURL := fmt.Sprintf(bggurlplays, url.QueryEscape(username), url.QueryEscape(fmt.Sprintf("%s-01-01", year)), url.QueryEscape(fmt.Sprintf("%s-12-31", year)))
 	xmldata := httpGetAndReadAll(playsURL)
 	resp := &bggo.PlaysResponse{}

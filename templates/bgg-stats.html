@@ -5,31 +5,70 @@
     <title>BGG Stats</title>
   </head>
   <body>
+    <div style="width:1200px;height:600px">
+        <canvas id="playsByMonth"></canvas>
+    </div>
     <div>
-        <canvas id="myChart"></canvas>
+        <h1>Top 10 Games</h1>
+        <table>
+            <tr>
+                <th>Game</th>
+                <th>Plays</th>
+            </tr>
+            {{range $game := .topTenGamesByPlays}}
+            <tr>
+                <td>{{$game.Name}}</td>
+                <td>{{$game.Plays}}</td>
+            </tr>
+            {{end}}
+        </table>
+        <div></div>
+    </div>
+    <div style="width:1200px;height:600px">
+        <canvas id="gamesByPercentage"></canvas>
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script>
-        const ctx = document.getElementById('myChart');
+        const gamesByMonthCtx = document.getElementById('playsByMonth');
     
-        new Chart(ctx, {
+        new Chart(gamesByMonthCtx, {
             type: 'bar',
             data: {
-            labels: {{ .months }},
-            datasets: [{
-                label: 'Plays By Month',
-                data: {{ .plays }},
-                borderWidth: 1
-            }]
+                labels: {{ .months }},
+                datasets: [{
+                    label: 'Plays By Month',
+                    data: {{ .playsByMonth }},
+                    borderWidth: 1
+                }]
             },
             options: {
-            scales: {
-                y: {
-                beginAtZero: true
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
                 }
             }
+        });
+
+        const gamesByPercentageCtx = document.getElementById('gamesByPercentage');
+    
+        new Chart(gamesByPercentageCtx, {
+            type: 'pie',
+            data: {
+                labels: {{ .gameNames }},
+                datasets: [{
+                    label: ' % plays',
+                    data: {{ .gamePercentages }},
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
             }
         });
     </script>
