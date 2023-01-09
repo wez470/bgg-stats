@@ -36,6 +36,7 @@ func main() {
 
 		statsData, err := getStats(user, year)
 		if err != nil {
+			fmt.Println(err)
 			c.HTML(http.StatusNotFound, "not-found.html", gin.H{})
 			return
 		}
@@ -66,7 +67,6 @@ func getStats(user string, year string) (*gin.H, error) {
 			fmt.Println("failed to parse date: ", play.Date)
 			continue
 		}
-		fmt.Println(play)
 		if len(play.Items) < 0 || len(play.Items) > 1 {
 			return nil, fmt.Errorf("more than 1 item in play")
 		}
@@ -98,11 +98,18 @@ func getStats(user string, year string) (*gin.H, error) {
 	// Percentage
 	var gameNames []string
 	var gamePercentages []int
+	otherPercent := 0.0
 	for _, gamePlay := range gamePlaysList {
+		percent := float64(gamePlay.Plays) / float64(totalPlays) * 100.0
+		if percent < 1.0 {
+			otherPercent += percent
+			continue
+		}
 		gameNames = append(gameNames, gamePlay.Name)
-		fmt.Println(float32(gamePlay.Plays) / float32(totalPlays) * 100.0)
-		gamePercentages = append(gamePercentages, int(float32(gamePlay.Plays)/float32(totalPlays)*100.0))
+		gamePercentages = append(gamePercentages, int(float64(gamePlay.Plays)/float64(totalPlays)*100.0))
 	}
+	gameNames = append(gameNames, "Other")
+	gamePercentages = append(gamePercentages, int(otherPercent))
 
 	return &gin.H{
 		"months":             months,
@@ -128,7 +135,7 @@ func parseMonth(date string) (int, error) {
 // largely copied from github.com/ssilva/bggo/cmd to get things started
 
 const (
-	bggurlplays      string = "https://www.boardgamegeek.com/xmlapi2/plays?username=%s&mindate=%s&maxdate=%s"
+	bggurlplays      string = "https://www.boardgamegeek.com/xmlapi2/plays?username=%s&mindate=%s&maxdate=%s&page=%d"
 	bggurlsearch     string = "https://www.boardgamegeek.com/xmlapi2/search?type=boardgame&query="
 	bggurlthing      string = "https://www.boardgamegeek.com/xmlapi2/thing?stats=1&id="
 	bggurlhot        string = "https://www.boardgamegeek.com/xmlapi2/hot?type=boardgame"
@@ -155,16 +162,28 @@ func printHelp() {
 }
 
 func retrievePlays(username, year string) (*bggo.PlaysResponse, error) {
-	// TODO: Paging
-	playsURL := fmt.Sprintf(bggurlplays, url.QueryEscape(username), url.QueryEscape(fmt.Sprintf("%s-01-01", year)), url.QueryEscape(fmt.Sprintf("%s-12-31", year)))
-	xmldata := httpGetAndReadAll(playsURL)
-	resp := &bggo.PlaysResponse{}
+	totalResp := &bggo.PlaysResponse{}
+	page := 1
 
-	err := xml.Unmarshal(xmldata, resp)
-	if err != nil {
-		return nil, err
+	for {
+		playsURL := fmt.Sprintf(bggurlplays, url.QueryEscape(username), url.QueryEscape(fmt.Sprintf("%s-01-01", year)), url.QueryEscape(fmt.Sprintf("%s-12-31", year)), page)
+		xmldata := httpGetAndReadAll(playsURL)
+
+		pageResp := &bggo.PlaysResponse{}
+		err := xml.Unmarshal(xmldata, pageResp)
+		if err != nil {
+			return nil, err
+		}
+
+		totalResp.Plays = append(totalResp.Plays, pageResp.Plays...)
+
+		if len(pageResp.Plays) < 100 {
+			break
+		}
+		page++
 	}
-	return resp, nil
+
+	return totalResp, nil
 }
 
 func printPlays(resp *bggo.PlaysResponse) {
