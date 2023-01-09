@@ -108,8 +108,10 @@ func getStats(user string, year string) (*gin.H, error) {
 		gameNames = append(gameNames, gamePlay.Name)
 		gamePercentages = append(gamePercentages, int(float64(gamePlay.Plays)/float64(totalPlays)*100.0))
 	}
-	gameNames = append(gameNames, "Other")
-	gamePercentages = append(gamePercentages, int(otherPercent))
+	if otherPercent > 0 {
+		gameNames = append(gameNames, "Other")
+		gamePercentages = append(gamePercentages, int(otherPercent))
+	}
 
 	return &gin.H{
 		"months":             months,
