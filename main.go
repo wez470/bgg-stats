@@ -18,6 +18,7 @@ import (
 )
 
 var months = []string{"Jan", "Feb", "March", "April", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"}
+var weekdays = []string{"Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"}
 
 func main() {
 	router := gin.Default()
@@ -60,9 +61,10 @@ func getStats(user string, year string) (*gin.H, error) {
 
 	playsByMonth := make([]int, 12)
 	playsByGame := make(map[string]int)
+	playsByWeekday := make([]int, 7)
 	var totalPlays int
 	for _, play := range resp.Plays {
-		monthInt, err := parseMonth(play.Date)
+		t, err := time.Parse("2006-01-02", play.Date)
 		if err != nil {
 			fmt.Println("failed to parse date: ", play.Date)
 			continue
@@ -72,8 +74,9 @@ func getStats(user string, year string) (*gin.H, error) {
 		}
 		game := play.Items[0]
 
-		playsByMonth[monthInt-1] += play.Quantity
+		playsByMonth[t.Month()-1] += play.Quantity
 		playsByGame[game.Name] += play.Quantity
+		playsByWeekday[t.Weekday()] += play.Quantity
 		totalPlays += play.Quantity
 	}
 
@@ -114,6 +117,8 @@ func getStats(user string, year string) (*gin.H, error) {
 	}
 
 	return &gin.H{
+		"weekdays":           weekdays,
+		"playsByWeekday":     playsByWeekday,
 		"months":             months,
 		"playsByMonth":       playsByMonth,
 		"topTenGamesByPlays": topTenGamesByPlays,
