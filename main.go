@@ -45,7 +45,7 @@ func main() {
 		c.HTML(http.StatusOK, "bgg-stats.html", statsData)
 	})
 
-	router.Run(":8080")
+	router.Run("localhost:8080")
 }
 
 type GamePlays struct {
@@ -62,7 +62,9 @@ func getStats(user string, year string) (*gin.H, error) {
 	playsByMonth := make([]int, 12)
 	playsByGame := make(map[string]int)
 	playsByWeekday := make([]int, 7)
+	playsByPlayer := make(map[string]int)
 	var totalPlays int
+	var totalWins int
 	for _, play := range resp.Plays {
 		t, err := time.Parse("2006-01-02", play.Date)
 		if err != nil {
@@ -77,6 +79,15 @@ func getStats(user string, year string) (*gin.H, error) {
 		playsByMonth[t.Month()-1] += play.Quantity
 		playsByGame[game.Name] += play.Quantity
 		playsByWeekday[t.Weekday()] += play.Quantity
+		for _, p := range play.Players {
+			if p.Username == user {
+				if p.Win {
+					totalWins += play.Quantity
+				}
+			} else {
+				playsByPlayer[p.Name] += play.Quantity
+			}
+		}
 		totalPlays += play.Quantity
 	}
 
@@ -100,7 +111,7 @@ func getStats(user string, year string) (*gin.H, error) {
 
 	// Percentage
 	var gameNames []string
-	var gamePercentages []int
+	var gamePercentages []float64
 	otherPercent := 0.0
 	for _, gamePlay := range gamePlaysList {
 		percent := float64(gamePlay.Plays) / float64(totalPlays) * 100.0
@@ -109,11 +120,19 @@ func getStats(user string, year string) (*gin.H, error) {
 			continue
 		}
 		gameNames = append(gameNames, gamePlay.Name)
-		gamePercentages = append(gamePercentages, int(float64(gamePlay.Plays)/float64(totalPlays)*100.0))
+		gamePercentages = append(gamePercentages, toFixed(float64(gamePlay.Plays)/float64(totalPlays)*100, 1))
 	}
 	if otherPercent > 0 {
 		gameNames = append(gameNames, "Other")
-		gamePercentages = append(gamePercentages, int(otherPercent))
+		gamePercentages = append(gamePercentages, toFixed(otherPercent, 1))
+	}
+
+	// Plays per player
+	var playerNames []string
+	var playerPlays []int
+	for player, plays := range playsByPlayer {
+		playerNames = append(playerNames, player)
+		playerPlays = append(playerPlays, plays)
 	}
 
 	return &gin.H{
@@ -124,7 +143,19 @@ func getStats(user string, year string) (*gin.H, error) {
 		"topTenGamesByPlays": topTenGamesByPlays,
 		"gameNames":          gameNames,
 		"gamePercentages":    gamePercentages,
+		"playerNames":        playerNames,
+		"playerPlays":        playerPlays,
+		"winPercentage":      toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
 	}, nil
+}
+
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+func toFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num*output)) / output
 }
 
 func parseMonth(date string) (int, error) {

@@ -5,9 +5,11 @@
     <title>BGG Stats</title>
   </head>
   <body>
+    <h1>Plays By Month</h1>
     <div style="width:1200px;height:600px">
         <canvas id="playsByMonth"></canvas>
     </div>
+    <h1>Plays By Weekday</h1>
     <div style="width:1200px;height:600px">
         <canvas id="playsByWeekday"></canvas>
     </div>
@@ -27,9 +29,17 @@
         </table>
         <div></div>
     </div>
+    <h1>Percent Plays By Game</h1>
     <div style="margin-top:20px;width:1600px;height:800px">
         <canvas id="gamesByPercentage"></canvas>
     </div>
+    {{ if .playerNames }}
+    <h1>Plays By Player</h1>
+    <div style="margin-top:20px;width:1600px;height:800px">
+        <canvas id="playsByPlayer"></canvas>
+    </div>
+    {{ end }}
+    <h1>You Won {{ .winPercentage}}% of Plays</h1>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -81,6 +91,26 @@
                 datasets: [{
                     label: ' % plays',
                     data: {{ .gamePercentages }},
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        const playsByPlayerCtx = document.getElementById('playsByPlayer');
+        new Chart(playsByPlayerCtx, {
+            type: 'pie',
+            data: {
+                labels: {{ .playerNames }},
+                datasets: [{
+                    label: ' plays by player',
+                    data: {{ .playerPlays }},
                     borderWidth: 1
                 }]
             },
