@@ -48,9 +48,15 @@ func main() {
 	router.Run("localhost:8080")
 }
 
+type NamedGamePlays struct {
+	Name          string
+	Plays         int
+	WinPercentage float64
+}
+
 type GamePlays struct {
-	Name  string
-	Plays int
+	Plays      int
+	PlayerWins int
 }
 
 func getStats(user string, year string) (*gin.H, error) {
@@ -60,7 +66,7 @@ func getStats(user string, year string) (*gin.H, error) {
 	}
 
 	playsByMonth := make([]int, 12)
-	playsByGame := make(map[string]int)
+	statsByGame := make(map[string]*GamePlays)
 	playsByWeekday := make([]int, 7)
 	playsByPlayer := make(map[string]int)
 	var totalPlays int
@@ -76,13 +82,18 @@ func getStats(user string, year string) (*gin.H, error) {
 		}
 		game := play.Items[0]
 
+		if _, ok := statsByGame[game.Name]; !ok {
+			statsByGame[game.Name] = &GamePlays{}
+		}
+		gameStats := statsByGame[game.Name]
+		gameStats.Plays += play.Quantity
 		playsByMonth[t.Month()-1] += play.Quantity
-		playsByGame[game.Name] += play.Quantity
 		playsByWeekday[t.Weekday()] += play.Quantity
 		for _, p := range play.Players {
 			if p.Username == user {
 				if p.Win {
 					totalWins += play.Quantity
+					gameStats.PlayerWins += play.Quantity
 				}
 			} else {
 				playsByPlayer[p.Name] += play.Quantity
@@ -92,16 +103,17 @@ func getStats(user string, year string) (*gin.H, error) {
 	}
 
 	// All games by plays
-	gamePlaysList := make([]GamePlays, 0, len(playsByGame))
-	for g, p := range playsByGame {
-		gamePlaysList = append(gamePlaysList, GamePlays{g, p})
+	gamePlaysList := make([]NamedGamePlays, 0, len(statsByGame))
+	for game, stats := range statsByGame {
+		winPercentage := toFixed(float64(stats.PlayerWins)/float64(stats.Plays)*100, 1)
+		gamePlaysList = append(gamePlaysList, NamedGamePlays{game, stats.Plays, winPercentage})
 	}
 	sort.Slice(gamePlaysList, func(i, j int) bool {
 		return gamePlaysList[i].Plays > gamePlaysList[j].Plays
 	})
 
 	// Top ten
-	var topTenGamesByPlays []GamePlays
+	var topTenGamesByPlays []NamedGamePlays
 	for i := 0; i < 10; i++ {
 		if i >= len(gamePlaysList) {
 			break
