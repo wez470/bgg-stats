@@ -34,17 +34,29 @@
                     <tr>
                         <th>Game</th>
                         <th>Plays</th>
+                        {{ if .winPercentage }}
                         <th>Win Rate</th>
+                        {{ end }}
                     </tr>
                     {{range $game := .topTenGamesByPlays}}
                     <tr>
                         <td>{{$game.Name}}</td>
                         <td>{{$game.Plays}}</td>
+                        {{ if $.winPercentage }}
                         <td>{{$game.WinPercentage}}%</td>
+                        {{ end }}
                     </tr>
                     {{end}}
                 </table>
+                {{ if $.winPercentage }}
                 <h3 style="padding: 5px;">Overall win percentage: {{ .winPercentage}}%</h3>
+                {{end}}
+            </div>
+        </div>
+        <div class="row">
+            <div class="col card">
+                <h1>Percent Plays By Game</h1>
+                <canvas style="max-height: 800px" id="gamesByPercentage"></canvas>
             </div>
         </div>
         {{ if .playerNames }}
@@ -55,12 +67,6 @@
             </div>
         </div>
         {{ end }}
-        <div class="row">
-            <div class="col card">
-                <h1>Percent Plays By Game</h1>
-                <canvas style="max-height: 800px" id="gamesByPercentage"></canvas>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -130,7 +136,7 @@
             data: {
                 labels: {{ .playerNames }},
                 datasets: [{
-                    label: ' plays by player',
+                    label: ' plays',
                     data: {{ .playerPlays }},
                     borderWidth: 1
                 }]
