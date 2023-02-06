@@ -168,6 +168,7 @@ func getStats(user string, year string) (*gin.H, error) {
 		"playerNames":        playerNames,
 		"playerPlays":        playerPlays,
 		"winPercentage":      toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
+		"totalPlays":         totalPlays,
 	}, nil
 }
 
