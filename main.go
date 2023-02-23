@@ -21,6 +21,7 @@ var months = []string{"Jan", "Feb", "March", "April", "May", "June", "July", "Au
 var weekdays = []string{"Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"}
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.LoadHTMLFiles("./templates/bgg-stats.html", "./templates/not-found.html")
 
@@ -45,7 +46,7 @@ func main() {
 		c.HTML(http.StatusOK, "bgg-stats.html", statsData)
 	})
 
-	router.Run("localhost:8080")
+	router.Run(":8080")
 }
 
 type NamedGamePlays struct {
