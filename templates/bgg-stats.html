@@ -20,6 +20,22 @@
     <div class="container text-center" style="padding-top: 10px;">
         <div class="row">
             <div class="col card">
+                <div class="dropdown mt-3 mb-3">
+                    <a style="max-width: 150px;" class="btn btn-secondary dropdown-toggle d-flex justify-content-start" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        {{.selectedYear}}
+                    </a>
+                    <ul class="dropdown-menu">
+                        {{range $year := .years}}
+                        <li>
+                            <a class="dropdown-item" href="{{$.path}}?year={{$year}}">{{$year}}</a>
+                        </li>
+                        {{end}}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col card">
                 <h1>Total Plays</h1>
                 <p class="total-plays">{{ .totalPlays }}</p>
             </div>

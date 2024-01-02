@@ -36,7 +36,7 @@ func main() {
 			year = fmt.Sprintf("%d", time.Now().Year())
 		}
 
-		statsData, err := getStats(user, year)
+		statsData, err := getStats(user, year, c.Request.URL)
 		if err != nil {
 			fmt.Println(err)
 			c.HTML(http.StatusNotFound, "not-found.html", gin.H{})
@@ -60,7 +60,7 @@ type GamePlays struct {
 	PlayerWins int
 }
 
-func getStats(user string, year string) (*gin.H, error) {
+func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	resp, err := retrievePlays(user, year)
 	if err != nil {
 		return nil, err
@@ -158,6 +158,23 @@ func getStats(user string, year string) (*gin.H, error) {
 		playerPlays = append(playerPlays, otherPlayersPlays)
 	}
 
+	// Available years
+	var availYears []int
+	currYear := time.Now().Year()
+	for i := 0; i <= 10; i++ {
+		availYears = append(availYears, currYear-i)
+	}
+	// Curr selected year
+	var queryVals url.Values
+	queryVals, err = url.ParseQuery(reqURL.RawQuery)
+	if err != nil {
+		return nil, err
+	}
+	selectedYear := strconv.Itoa(currYear)
+	if queryVals.Has("year") {
+		selectedYear = queryVals.Get("year")
+	}
+
 	return &gin.H{
 		"weekdays":           weekdays,
 		"playsByWeekday":     playsByWeekday,
@@ -170,6 +187,9 @@ func getStats(user string, year string) (*gin.H, error) {
 		"playerPlays":        playerPlays,
 		"winPercentage":      toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
 		"totalPlays":         totalPlays,
+		"years":              availYears,
+		"path":               reqURL.Path,
+		"selectedYear":       selectedYear,
 	}, nil
 }
 
