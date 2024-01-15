@@ -101,12 +101,36 @@
             data: {
                 labels: {{ .months }},
                 datasets: [{
-                    label: 'Plays By Month',
+                    label: 'Other',
+                    stack: 'month',
                     data: {{ .playsByMonth }},
-                    borderWidth: 1
-                }]
+                    borderWidth: 1,
+                    backgroundColor: ['rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)',
+                        'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)', 'rgba(0, 150, 250, 0.5)']
+                }{{range $index, $game := .topGameByMonth}}
+                ,{
+                    label: {{$game.Name}},
+                    stack: 'month',
+                    data: [{{range $i, $g := $.topGameByMonth}}
+                        {{if eq $i $game.Month}}
+                            {{$game.Plays}},
+                        {{else}}
+                            null,
+                        {{end}}
+                    {{end}}],
+                    fill: false,
+                    borderWidth: 1,
+                    backgroundColor: ['rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)',
+                        'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', 'rgba(0, 200, 50, 0.6)', ]
+                }
+                {{end}}]
             },
             options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
                 scales: {
                     y: {
                         beginAtZero: true
@@ -127,6 +151,11 @@
                 }]
             },
             options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
                 scales: {
                     y: {
                         beginAtZero: true
@@ -177,4 +206,3 @@
     </script>
   </body>
 </html>
-   

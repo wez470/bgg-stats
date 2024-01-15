@@ -49,6 +49,12 @@ func main() {
 	router.Run(":8080")
 }
 
+type MonthGamePlays struct {
+	Name  string
+	Plays int
+	Month int
+}
+
 type NamedGamePlays struct {
 	Name          string
 	Plays         int
@@ -66,7 +72,9 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 		return nil, err
 	}
 
-	playsByMonth := make([]int, 12)
+	totalPlaysByMonth := make([]int, 12)
+	allGamePlaysByMonth := make([]map[string]int, 12)
+	topGamePlaysByMonth := make([]MonthGamePlays, 12)
 	statsByGame := make(map[string]*GamePlays)
 	playsByWeekday := make([]int, 7)
 	playsByPlayer := make(map[string]int)
@@ -88,7 +96,11 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 		}
 		gameStats := statsByGame[game.Name]
 		gameStats.Plays += play.Quantity
-		playsByMonth[t.Month()-1] += play.Quantity
+		totalPlaysByMonth[t.Month()-1] += play.Quantity
+		if allGamePlaysByMonth[t.Month()-1] == nil {
+			allGamePlaysByMonth[t.Month()-1] = map[string]int{}
+		}
+		allGamePlaysByMonth[t.Month()-1][game.Name] += 1
 		playsByWeekday[t.Weekday()] += play.Quantity
 		for _, p := range play.Players {
 			if p.Username == user {
@@ -174,12 +186,32 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	if queryVals.Has("year") {
 		selectedYear = queryVals.Get("year")
 	}
+	for i := 0; i < len(months); i++ {
+		allGamesForMonth := allGamePlaysByMonth[i]
+		gameNamesForMonth := make([]string, 0, len(allGamesForMonth))
+		for n, _ := range allGamesForMonth {
+			gameNamesForMonth = append(gameNamesForMonth, n)
+		}
+		sort.SliceStable(gameNamesForMonth, func(i, j int) bool {
+			return allGamesForMonth[gameNamesForMonth[i]] > allGamesForMonth[gameNamesForMonth[j]]
+		})
+		if len(gameNamesForMonth) > 0 {
+			topGamePlaysByMonth[i] = MonthGamePlays{
+				Name:  gameNamesForMonth[0],
+				Plays: allGamesForMonth[gameNamesForMonth[0]],
+				Month: i,
+			}
+			// subtract the months top game from total plays since it'll be shown as a seperate bar
+			totalPlaysByMonth[i] -= allGamesForMonth[gameNamesForMonth[0]]
+		}
+	}
 
 	return &gin.H{
 		"weekdays":           weekdays,
 		"playsByWeekday":     playsByWeekday,
 		"months":             months,
-		"playsByMonth":       playsByMonth,
+		"playsByMonth":       totalPlaysByMonth,
+		"topGameByMonth":     topGamePlaysByMonth,
 		"topTenGamesByPlays": topTenGamesByPlays,
 		"gameNames":          gameNames,
 		"gamePercentages":    gamePercentages,
