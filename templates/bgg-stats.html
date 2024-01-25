@@ -92,6 +92,14 @@
             </div>
         </div>
         {{ end }}
+        {{ if .locationNames }}
+        <div class="row">
+            <div class="col card">
+                <h1>Plays By Location</h1>
+                <canvas style="max-height: 800px" id="playsByLocation"></canvas>
+            </div>
+        </div>
+        {{ end }}
     </div>
 
     <script>
@@ -198,6 +206,26 @@
             options: {
                 scales: {
                     y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        const playsByLocationCtx = document.getElementById('playsByLocation');
+        new Chart(playsByLocationCtx, {
+            type: 'radar',
+            data: {
+                labels: {{ .locationNames }},
+                datasets: [{
+                    label: ' plays',
+                    data: {{ .locationPlays }},
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                scales: {
+                    r: {
                         beginAtZero: true
                     }
                 }

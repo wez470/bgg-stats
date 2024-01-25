@@ -78,6 +78,7 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	statsByGame := make(map[string]*GamePlays)
 	playsByWeekday := make([]int, 7)
 	playsByPlayer := make(map[string]int)
+	playsByLocation := make(map[string]int)
 	var totalPlays int
 	var totalWins int
 	for _, play := range resp.Plays {
@@ -111,6 +112,9 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 			} else {
 				playsByPlayer[p.Name] += play.Quantity
 			}
+		}
+		if play.Location != "" {
+			playsByLocation[play.Location] += 1
 		}
 		totalPlays += play.Quantity
 	}
@@ -205,6 +209,13 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 			totalPlaysByMonth[i] -= allGamesForMonth[gameNamesForMonth[0]]
 		}
 	}
+	// Plays by location
+	var locationNames []string
+	var locationPlays []int
+	for location, plays := range playsByLocation {
+		locationNames = append(locationNames, location)
+		locationPlays = append(locationPlays, plays)
+	}
 
 	return &gin.H{
 		"weekdays":           weekdays,
@@ -217,6 +228,8 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 		"gamePercentages":    gamePercentages,
 		"playerNames":        playerNames,
 		"playerPlays":        playerPlays,
+		"locationNames":      locationNames,
+		"locationPlays":      locationPlays,
 		"winPercentage":      toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
 		"totalPlays":         totalPlays,
 		"years":              availYears,
