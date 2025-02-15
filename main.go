@@ -221,7 +221,7 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	}
 
 	// Plays per player
-	playsPerPlayerList := make([]PlayerPlays, len(playsByPlayer))
+	playsPerPlayerList := make([]PlayerPlays, 0, len(playsByPlayer))
 	for player, plays := range playsByPlayer {
 		playsPerPlayerList = append(playsPerPlayerList, PlayerPlays{PlayerName: player, Plays: plays})
 	}
