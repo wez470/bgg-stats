@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,9 +62,27 @@ type NamedGamePlays struct {
 	WinPercentage float64
 }
 
+type NamedGamePlayTime struct {
+	Name          string
+	PlayTimeHours float64
+}
+
 type GamePlays struct {
 	Plays      int
 	PlayerWins int
+}
+
+type GameInfo struct {
+	Name            string
+	MinPlayTimeMins int
+	MaxPlayTimeMins int
+	AvgPlayTimeMins int
+	Complexity      float32
+}
+
+type PlayerPlays struct {
+	PlayerName string
+	Plays      int
 }
 
 func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
@@ -76,24 +95,32 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	allGamePlaysByMonth := make([]map[string]int, 12)
 	topGamePlaysByMonth := make([]MonthGamePlays, 12)
 	statsByGame := make(map[string]*GamePlays)
+	gameIDs := []string{}
+	gameInfoByName := make(map[string]GameInfo)
 	playsByWeekday := make([]int, 7)
 	playsByPlayer := make(map[string]int)
 	playsByLocation := make(map[string]int)
+	avgPlayTimeByGameMins := make(map[string]int)
+	playsByComplexity := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	complexityByPlayTimeMins := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
 	var totalPlays int
 	var totalWins int
+	var totalPlayTimeMins float64
 	for _, play := range resp.Plays {
 		t, err := time.Parse("2006-01-02", play.Date)
 		if err != nil {
 			fmt.Println("failed to parse date: ", play.Date)
 			continue
 		}
-		if len(play.Items) < 0 || len(play.Items) > 1 {
-			return nil, fmt.Errorf("more than 1 item in play")
+		if len(play.Items) == 0 || len(play.Items) > 1 {
+			return nil, fmt.Errorf("0 or greater than 1 item in play")
 		}
 		game := play.Items[0]
 
 		if _, ok := statsByGame[game.Name]; !ok {
+			// new game
 			statsByGame[game.Name] = &GamePlays{}
+			gameIDs = append(gameIDs, game.ObjectID)
 		}
 		gameStats := statsByGame[game.Name]
 		gameStats.Plays += play.Quantity
@@ -119,32 +146,69 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 		totalPlays += play.Quantity
 	}
 
+	// get info for each game
+	things := retrieveGames(gameIDs)
+	for _, thing := range things.Items {
+		gameName := ""
+		for _, n := range thing.Names {
+			if n.Type == "primary" {
+				gameName = n.Value
+				break
+			}
+		}
+		gameInfoByName[gameName] = GameInfo{
+			Name:            gameName,
+			MinPlayTimeMins: thing.MinPlayTime.Value,
+			MaxPlayTimeMins: thing.MaxPlayTime.Value,
+			AvgPlayTimeMins: (thing.MinPlayTime.Value + thing.MaxPlayTime.Value) / 2,
+			Complexity:      thing.Ratings.AverageWeight.Value,
+		}
+	}
+
 	// All games by plays
 	gamePlaysList := make([]NamedGamePlays, 0, len(statsByGame))
 	for game, stats := range statsByGame {
 		winPercentage := toFixed(float64(stats.PlayerWins)/float64(stats.Plays)*100, 1)
 		gamePlaysList = append(gamePlaysList, NamedGamePlays{game, stats.Plays, winPercentage})
+		avgPlayTimeByGameMins[game] = gameInfoByName[game].AvgPlayTimeMins * stats.Plays
+		gameComplexity := int(math.Max(math.Min(math.Ceil(float64(gameInfoByName[game].Complexity)), 5), 1))
+		playsByComplexity[gameComplexity] += stats.Plays
+		complexityByPlayTimeMins[gameComplexity] += avgPlayTimeByGameMins[game]
+		totalPlayTimeMins += float64(avgPlayTimeByGameMins[game])
+
 	}
 	sort.Slice(gamePlaysList, func(i, j int) bool {
 		return gamePlaysList[i].Plays > gamePlaysList[j].Plays
 	})
 
+	// Games play time list
+	gamePlayTimeList := make([]NamedGamePlayTime, 0, len(avgPlayTimeByGameMins))
+	for game, playTime := range avgPlayTimeByGameMins {
+		gamePlayTimeList = append(gamePlayTimeList, NamedGamePlayTime{game, toFixed(float64(playTime)/60.0, 1)})
+	}
+	sort.Slice(gamePlayTimeList, func(i, j int) bool {
+		return gamePlayTimeList[i].PlayTimeHours > gamePlayTimeList[j].PlayTimeHours
+	})
+
 	// Top ten
 	var topTenGamesByPlays []NamedGamePlays
+	var topTenGamesByPlayTime []NamedGamePlayTime
 	for i := 0; i < 10; i++ {
 		if i >= len(gamePlaysList) {
 			break
 		}
 		topTenGamesByPlays = append(topTenGamesByPlays, gamePlaysList[i])
+		topTenGamesByPlayTime = append(topTenGamesByPlayTime, gamePlayTimeList[i])
 	}
 
-	// Percentage
+	// Percentage plays by game
 	var gameNames []string
 	var gamePercentages []float64
 	otherGamesPercent := 0.0
-	for _, gamePlay := range gamePlaysList {
+	// limit players to 20 graph keys (19 + other)
+	for i, gamePlay := range gamePlaysList {
 		percent := float64(gamePlay.Plays) / float64(totalPlays) * 100.0
-		if percent < 1.0 {
+		if i >= 19 {
 			otherGamesPercent += percent
 			continue
 		}
@@ -157,17 +221,24 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 	}
 
 	// Plays per player
+	playsPerPlayerList := make([]PlayerPlays, len(playsByPlayer))
+	for player, plays := range playsByPlayer {
+		playsPerPlayerList = append(playsPerPlayerList, PlayerPlays{PlayerName: player, Plays: plays})
+	}
+	sort.Slice(playsPerPlayerList, func(i, j int) bool {
+		return playsPerPlayerList[i].Plays > playsPerPlayerList[j].Plays
+	})
+	// limit players to 20 graph keys (19 + other)
 	var playerNames []string
 	var playerPlays []int
 	var otherPlayersPlays int
-	for player, plays := range playsByPlayer {
-		percent := float64(plays) / float64(totalPlays) * 100.0
-		if percent < 2.0 {
-			otherPlayersPlays += plays
+	for i, playerPlay := range playsPerPlayerList {
+		if i >= 19 {
+			otherPlayersPlays += playerPlay.Plays
 			continue
 		}
-		playerNames = append(playerNames, player)
-		playerPlays = append(playerPlays, plays)
+		playerNames = append(playerNames, playerPlay.PlayerName)
+		playerPlays = append(playerPlays, playerPlay.Plays)
 	}
 	if otherPlayersPlays > 0 {
 		playerNames = append(playerNames, "Other")
@@ -217,24 +288,43 @@ func getStats(user string, year string, reqURL *url.URL) (*gin.H, error) {
 		locationPlays = append(locationPlays, plays)
 	}
 
+	// Complexity names / values
+	var complexityNames []string
+	var complexityPlays []int
+	var complexityPlayTimeHours []float64
+	for i := 1; i <= 5; i++ {
+		complexity := i
+		plays := playsByComplexity[complexity]
+		complexityNames = append(complexityNames, fmt.Sprintf("%d-%d", complexity-1, complexity))
+		complexityPlays = append(complexityPlays, plays)
+		complexityPlayTimeHours = append(complexityPlayTimeHours, toFixed(float64(complexityByPlayTimeMins[complexity])/60.0, 1))
+	}
+
 	return &gin.H{
-		"weekdays":           weekdays,
-		"playsByWeekday":     playsByWeekday,
-		"months":             months,
-		"playsByMonth":       totalPlaysByMonth,
-		"topGameByMonth":     topGamePlaysByMonth,
-		"topTenGamesByPlays": topTenGamesByPlays,
-		"gameNames":          gameNames,
-		"gamePercentages":    gamePercentages,
-		"playerNames":        playerNames,
-		"playerPlays":        playerPlays,
-		"locationNames":      locationNames,
-		"locationPlays":      locationPlays,
-		"winPercentage":      toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
-		"totalPlays":         totalPlays,
-		"years":              availYears,
-		"path":               reqURL.Path,
-		"selectedYear":       selectedYear,
+		"weekdays":              weekdays,
+		"playsByWeekday":        playsByWeekday,
+		"months":                months,
+		"uniquePlays":           len(statsByGame),
+		"playsByMonth":          totalPlaysByMonth,
+		"avgPlaytimeByGame":     avgPlayTimeByGameMins,
+		"complexityNames":       complexityNames,
+		"complexityPlays":       complexityPlays,
+		"complexityPlayTime":    complexityPlayTimeHours,
+		"topGameByMonth":        topGamePlaysByMonth,
+		"topTenGamesByPlays":    topTenGamesByPlays,
+		"topTenGamesByPlayTime": topTenGamesByPlayTime,
+		"gameNames":             gameNames,
+		"gamePercentages":       gamePercentages,
+		"playerNames":           playerNames,
+		"playerPlays":           playerPlays,
+		"locationNames":         locationNames,
+		"locationPlays":         locationPlays,
+		"winPercentage":         toFixed(float64(totalWins)/float64(totalPlays)*100, 1),
+		"totalPlays":            totalPlays,
+		"totalHours":            toFixed(totalPlayTimeMins/60.0, 1),
+		"years":                 availYears,
+		"path":                  reqURL.Path,
+		"selectedYear":          selectedYear,
 	}, nil
 }
 
@@ -326,12 +416,20 @@ func printPlays(resp *bggo.PlaysResponse) {
 	}
 }
 
-// `gameIDs` is a comma-separated list of game IDs
-func retrieveGames(gameIDs string) (resp *bggo.ThingResponse) {
+func retrieveGames(gameIDs []string) (resp *bggo.ThingResponse) {
+	gameIDBatches := slices.Chunk(gameIDs, 20)
+	allResp := &bggo.ThingResponse{}
+	for batch := range gameIDBatches {
+		allResp.Items = append(allResp.Items, retrieveGames20(strings.Join(batch, ",")).Items...)
+	}
+	return allResp
+}
+
+// `gameIDs` is a comma-separated list of game IDs. Max 20 items
+func retrieveGames20(gameIDs string) (resp *bggo.ThingResponse) {
 	xmldata := httpGetAndReadAll(bggurlthing + gameIDs)
 	resp = &bggo.ThingResponse{}
 	unmarshalOrDie(xmldata, resp)
-
 	return
 }
 
@@ -368,7 +466,7 @@ func retrieveAndPrintGameRating(gameName string, exactSearch bool) {
 	}
 
 	for _, item := range results.Items {
-		game := retrieveGames(item.ID)
+		game := retrieveGames20(item.ID)
 		printGames(game)
 	}
 }
